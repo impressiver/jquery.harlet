@@ -303,6 +303,8 @@
             table.append(tbody);
 
             placeholder.html(table);
+            
+            // TODO: Namespace events and update refs to use "on" 
             $(table).peep("tr.entry-row td.request a");
 
             $.each(hooks["render"], function (i, callback) {
@@ -376,7 +378,7 @@
                 callback.call(harlet, data);
             });
         }
-
+        
         function showTooltip (x, y, entry) {
             doHideTooltip();
 
@@ -539,6 +541,17 @@
 
     $.harlet = function(placeholder, har, options) {
         return new Harlet($(placeholder), har, options, $.harlet.plugins);
+    };
+    
+    $.fn.harlet = function (har, options) {
+        if (1 == arguments.length) {
+            options = har;
+            har = options.har;
+        }
+        
+        return this.each(function() {
+            $.harlet($(this), har, options);
+        });
     };
 
     $.harlet.plugins = [];
