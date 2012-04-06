@@ -105,7 +105,7 @@
         }
 
         function parseData() {
-            var harr = $.extend(true, har),
+            var harr = $.extend(true, {}, har),
                 data = {
                     pages: [],
                     fileCount: 0, totalSize: 0, cachedSize: 0, totalTime: 0
