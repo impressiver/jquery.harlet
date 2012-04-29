@@ -1,12 +1,12 @@
 /*
- * jQuery Harlet v1.1
- * 
+ * jQuery Harlet
  *
- * Copyright (c) 2011 Ian White (ian@fuzzygroove.com)
+ * Copyright (c) 2012 Ian White (ian@fuzzygroove.com)
  *
  */
 (function($) {
     function Harlet(placeholder, inputData, options, plugins) {
+        
         var options = $.extend({
             timeSliceInterval: 1000,
             autoInit: true
@@ -22,6 +22,7 @@
                 draw: [],
                 tooltip: []
             },
+            lookup = {}, // Hack needed because you cant set data attributes on objects that are not yet in the DOM
             guid = 0,
             instance = ++Harlet.instances,
             initialized = false;
@@ -65,6 +66,17 @@
                 setHar(inputData);
             }
 
+            // Register event delegates
+            $(document).peep("table.harlet-net tr.entry-row td.request a");
+
+            $(document).on("mouseenter", "table.harlet-net .net-bar", function(e) {
+                e = $.event.fix(e);
+                showTooltip(e.pageX, e.pageY, this);
+            });
+
+            $(document).on("mouseleave", "table.harlet-net .net-bar", doHideTooltip);
+            
+            // Register init callbacks
             $.each(hooks.init, function (i, callback) {
                 callback.call(harlet);
             });
@@ -302,17 +314,18 @@
             var tbody = $("<tbody id=\"harlet-net-body-" + instance + "\" class=\"harlet-net-body\"></tbody>");
             table.append(tbody);
 
+            // Attack the table to the DOM
             placeholder.html(table);
             
-            // TODO: Namespace events and update refs to use "on" 
-            $(table).peep("tr.entry-row td.request a");
-
+            // Fire render callbacks
             $.each(hooks["render"], function (i, callback) {
                 callback.call(harlet);
             });
         }
 
         function draw() {
+            lookup = {};
+            
             var data = parseData();
 
             var tbody = $("tbody.harlet-net-body", placeholder);
@@ -333,10 +346,12 @@
                 for(var j = 0; j < page.slices.length; ++j) {
                     var slice = page.slices[j];
 
+                    // Rows
                     for(var k = 0; k < slice.entries.length; ++k) {
-                        var entry = slice.entries[k];
+                        var rowId = i + "-" + j + "-" + k,
+                            entry = slice.entries[k];
 
-                        var tr = $("<tr id=\"harlet-entry-row-" + instance + "-" + i + "-" + j + "-" + k + "\" class=\"entry-row\"></tr>");
+                        var tr = $("<tr id=\"harlet-entry-row-" + instance + "-" + rowId + "\" class=\"entry-row\"></tr>");
                         var td = $("<td class=\"request\"></td>");
                         var a = $("<a href=\"" + entry.request.url + "\" target=\"_blank\">" + entry.request.method + " " + entry.request.url + "</a>");
                         td.append(a);
@@ -348,39 +363,38 @@
 
                         // Net bar
                         var chartTd = $("<td class=\"chart\"></td>");
-                        var div = $("<div class=\"net-bar clearfix\"></div>");
+                        var div = $("<div class=\"net-bar clearfix\" data-lookup=\"" + rowId + "\"></div>");
                         /* div.append("<div class=\"net-total-bar\"style=\"left:0;width:" + (dnsLen + ttfbLen + ttlbLen) + "%\"></div>"); */
-                        div.append("<div class=\"net-resolving-bar\"style=\"left:" + entry.barOffset + "%;width:" + entry.barResolving + "%\"></div>");
-                        div.append("<div class=\"net-connecting-bar\"style=\"left:" + entry.barOffset + "%;width:" + entry.barConnecting + "%\"></div>");
-                        div.append("<div class=\"net-blocking-bar\"style=\"left:" + entry.barOffset + "%;width:" + entry.barBlocking + "%\"></div>");
-                        div.append("<div class=\"net-sending-bar\"style=\"left:" + entry.barOffset + "%;width:" + entry.barSending + "%\"></div>");
-                        div.append("<div class=\"net-waiting-bar\"style=\"left:" + entry.barOffset + "%;width:" + entry.barWaiting + "%\"></div>");
-                        div.append("<div class=\"net-receiving-bar\"style=\"left:" + entry.barOffset + "%;width:" + entry.barReceiving + "%\"></div>");
-                        div.append("<div class=\"net-time\"style=\"left:" + (entry.barOffset + entry.barReceiving) + "%\">" + formatResponseTime(entry.time) + "</div>");
-
-                        div.mouseenter(function(entry) {
-                            return function(e) {
-                                e = $.event.fix(e);
-                                showTooltip(e.pageX, e.pageY, entry);
-                            };
-                        }(entry));
-
-                        div.mouseleave(doHideTooltip);
+                        div.append("<div class=\"net-resolving-bar\" style=\"left:" + entry.barOffset + "%;width:" + entry.barResolving + "%\"></div>");
+                        div.append("<div class=\"net-connecting-bar\" style=\"left:" + entry.barOffset + "%;width:" + entry.barConnecting + "%\"></div>");
+                        div.append("<div class=\"net-blocking-bar\" style=\"left:" + entry.barOffset + "%;width:" + entry.barBlocking + "%\"></div>");
+                        div.append("<div class=\"net-sending-bar\" style=\"left:" + entry.barOffset + "%;width:" + entry.barSending + "%\"></div>");
+                        div.append("<div class=\"net-waiting-bar\" style=\"left:" + entry.barOffset + "%;width:" + entry.barWaiting + "%\"></div>");
+                        div.append("<div class=\"net-receiving-bar\" style=\"left:" + entry.barOffset + "%;width:" + entry.barReceiving + "%\"></div>");
+                        div.append("<div class=\"net-time\" style=\"left:" + (entry.barOffset + entry.barReceiving) + "%\">" + formatResponseTime(entry.time) + "</div>");
 
                         chartTd.append(div);
                         tr.append(chartTd);
                         tbody.append(tr);
+                        
+                        // TODO: Doesn't work if placeholder isn't in the DOM
+                        div.data("entry", "foo");
+                        
+                        lookup[rowId] = entry;
                     }
                 }
             }
-
+            
+            // Fire callbacks
             $.each(hooks["draw"], function (i, callback) {
                 callback.call(harlet, data);
             });
         }
-        
-        function showTooltip (x, y, entry) {
+
+        function showTooltip (x, y, elm) {
             doHideTooltip();
+            
+            var entry = lookup[$(elm).attr("data-lookup")];
 
             var content = "";
             if(entry.serverIPAddress) content += "<div><strong>IP Address: </strong> " + entry.serverIPAddress + "</div>";
@@ -541,17 +555,6 @@
 
     $.harlet = function(placeholder, har, options) {
         return new Harlet($(placeholder), har, options, $.harlet.plugins);
-    };
-    
-    $.fn.harlet = function (har, options) {
-        if (1 == arguments.length) {
-            options = har;
-            har = options.har;
-        }
-        
-        return this.each(function() {
-            $.harlet($(this), har, options);
-        });
     };
 
     $.harlet.plugins = [];
